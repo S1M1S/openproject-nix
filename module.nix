@@ -128,11 +128,6 @@ in {
       after = [ "openproject-seeder.service" ];
     };
 
-    services.memcached = {
-      enable = true;
-      enableUnixSocket = true;
-    };
-
     systemd.tmpfiles.rules = [
       "d ${cfg.statePath} 0750 openproject openproject"
     ];
