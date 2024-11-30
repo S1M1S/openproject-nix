@@ -89,48 +89,54 @@ in {
       };
     };
 
-    systemd.services."openproject-seeder" = {
-      serviceConfig.User = "openproject";
-      serviceConfig.Type = "oneshot";
-      serviceConfig.RemainAfterExit = true;
-      bindsTo = [ "postgresql.service" ];
-      environment = cfg.environment;
-      serviceConfig.EnvironmentFile = cfg.secrets.extraSeedEnvironmentFile;
-      serviceConfig.ExecStart = "${cfg.package}/bin/openproject-seeder openproject";
-    };
-    systemd.services."openproject-web" = {
-      serviceConfig.User = "openproject";
-      bindsTo = [ "openproject-seeder.service" ];
-      after = [ "openproject-seeder.service" ];
-      wantedBy = [ "multi-user.target" ];
-      environment = cfg.environment;
-      serviceConfig.ExecStart = "${cfg.package}/bin/openproject-web -b ${cfg.host.bind.addr} -p ${toString cfg.host.bind.port}";
-    };
-    systemd.services."openproject-worker" = {
-      serviceConfig.User = "openproject";
-      bindsTo = [ "openproject-seeder.service" ];
-      after = [ "openproject-seeder.service" ];
-      wantedBy = [ "multi-user.target" ];
-      environment = cfg.environment;
-      serviceConfig.ExecStart = "${cfg.package}/bin/openproject-worker";
-    };
-    systemd.services."openproject-cron" = {
-      serviceConfig.User = "openproject";
-      bindsTo = [ "openproject-seeder.service" ];
-      after = [ "openproject-seeder.service" ];
-      environment = cfg.environment;
-      serviceConfig.ExecStart = mkIf cfg.imap.enable "${cfg.package}/bin/openproject-cron-step-imap";
-    };
-    systemd.timers."openproject-cron" = {
-      timerConfig.OnActiveSec = "30 seconds";
-      timerConfig.OnUnitInactiveSec = "5 minutes";
-      wantedBy = [ "multi-user.target" ];
-      after = [ "openproject-seeder.service" ];
-    };
+    launchd.daemons = {
+      openproject-seeder = {
+        serviceConfig = {
+          ProgramArguments = [ "${cfg.package}/bin/openproject-seeder" "openproject" ];
+          UserName = "openproject";
+          KeepAlive = false;
+          RunAtLoad = true;
+          EnvironmentVariables = cfg.environment;
+          StandardOutPath = "/var/log/openproject-seeder.log";
+          StandardErrorPath = "/var/log/openproject-seeder.error.log";
+        };
+      };
+      
+      openproject-web = {
+        serviceConfig = {
+          ProgramArguments = [ "${cfg.package}/bin/openproject-web" "-b" cfg.host.bind.addr "-p" (toString cfg.host.bind.port) ];
+          UserName = "openproject";
+          KeepAlive = true;
+          RunAtLoad = true;
+          EnvironmentVariables = cfg.environment;
+          StandardOutPath = "/var/log/openproject-web.log";
+          StandardErrorPath = "/var/log/openproject-web.error.log";
+        };
+      };
 
-    systemd.tmpfiles.rules = [
-      "d ${cfg.statePath} 0750 openproject openproject"
-    ];
+      openproject-worker = {
+        serviceConfig = {
+          ProgramArguments = [ "${cfg.package}/bin/openproject-worker" ];
+          UserName = "openproject";
+          KeepAlive = true;
+          RunAtLoad = true;
+          EnvironmentVariables = cfg.environment;
+          StandardOutPath = "/var/log/openproject-worker.log";
+          StandardErrorPath = "/var/log/openproject-worker.error.log";
+        };
+      };
+
+      openproject-cron = mkIf cfg.imap.enable {
+        serviceConfig = {
+          ProgramArguments = [ "${cfg.package}/bin/openproject-cron-step-imap" ];
+          UserName = "openproject";
+          StartInterval = 300;
+          EnvironmentVariables = cfg.environment;
+          StandardOutPath = "/var/log/openproject-cron.log";
+          StandardErrorPath = "/var/log/openproject-cron.error.log";
+        };
+      };
+    };
 
     services.postgresql = {
       enable = true;
